@@ -1,0 +1,19 @@
+#parse("/velocity/layout.vm")
+#@mainLayout()
+<h1>$msg.get("INDEX_HEADING")</h1>
+<h2>$msg.get("INDEX_REGISTERED_USERS", $users.size())</h2>
+<ul>
+    #foreach($user in $users)
+        <li>$user.getUserName()</li>
+    #end
+</ul>
+    #if($item)
+    <h2>$msg.get("INDEX_ITEM_OF_THE_DAY_TEXT")</h2>
+    <div class="row row-2">
+        <div class="col">
+            <a href="/items/$item.basename">$msg.get("INDEX_ITEM_OF_THE_DAY_LINK", $item.displayname, $item.getTooltip())</a>
+            <a href="/items/$item.basename">$msg.get("INDEX_ITEM_OF_THE_DAY_TOOLTIP", $item.getTooltip())</a>
+        </div>
+    </div>
+    #end
+#end

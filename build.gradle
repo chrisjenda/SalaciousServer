@@ -1,0 +1,215 @@
+plugins {
+    id "com.github.johnrengelman.shadow" version "7.1.2"
+    id 'java'
+    id 'application'
+}
+
+group 'PZHook_server'
+def Version = '1.0'
+version = Version
+
+def PZGameFolder = '/home/chris/ZomboidGame/serve/'
+
+// Disable Unused Default Tasks
+project.gradle.startParameter.excludedTaskNames.add(':processResources')
+project.gradle.startParameter.excludedTaskNames.add(':prepareKotlinBuildScriptModel')
+project.gradle.startParameter.excludedTaskNames.add(':compileTestJava')
+project.gradle.startParameter.excludedTaskNames.add(':processTestResources')
+project.gradle.startParameter.excludedTaskNames.add(':shadowDistZip')
+project.gradle.startParameter.excludedTaskNames.add(':test')
+project.gradle.startParameter.excludedTaskNames.add(':distTar')
+project.gradle.startParameter.excludedTaskNames.add(':distZip')
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+        vendor = JvmVendorSpec.AZUL
+    }
+}
+
+compileJava {
+    options.release = 17
+}
+
+dependencies {
+    implementation group: 'net.uptheinter', name: 'interceptify', version: '1.2.2'
+
+    compileOnly files(PZGameFolder + "java")
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.0-M1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.0-M1'
+}
+
+startShadowScripts {
+    applicationName = "PZHook_server"
+    defaultJvmOpts = ["-Dzomboid.steam=0",
+                      "-Djava.awt.headless=true",
+                      "-Xms1800m",
+                      "-Xmx4096m",
+                      "-Dzomboid.znetlog=1",
+                      "-Djava.library.path=linux64:natives:.:jre64/lib/amd64",
+                      "-XX:+UnlockExperimentalVMOptions",
+                      "-XX:+UseZGC",
+                      "-javaagent:./java/" + jar.archiveFileName.get(),
+    ]
+    executableDir = ''
+    mainClass = 'PZHook_server.Main'
+    doLast {
+
+        // Inject Auto Kill old Server Processes Function
+        unixScript.text = unixScript.text.replace(
+                'SAVED="`pwd`"',
+                '\npz_pid=$(pgrep -if \'java -Dzomboid.steam\')\n' +
+                        'counter=1\n' +
+                        'while ! [ -z $pz_pid ]\n' +
+                        'do\n' +
+                        '    if [ $counter -gt 15 ]; then\n' +
+                        '        break\n' +
+                        '    fi\n' +
+                        '    kill -9 $pz_pid\n' +
+                        '    ((counter++))\n' +
+                        'done\n' +
+                        'SAVED="`pwd`"\n')
+
+        unixScript.text = unixScript.text.replace(
+                "-Dzomboid.steam=0",
+                '-Dzomboid.steam=0" ' + '"-Duser.home=${APP_HOME}')
+
+        // Add Complex Java options and lwjgl path
+        unixScript.text = unixScript.text.replace(
+                '"-javaagent:./java/' + group + "-" + version + '.jar"',
+                "-javaagent:./java/" + group + "-" + version + ".jar " + "--add-opens java.base/java.lang.reflect=ALL-UNNAMED " + '-Dorg.lwjgl.librarypath=${APP_HOME}')
+
+        // Fix Classpath and add Game Class Path
+        unixScript.text = unixScript.text.replace(
+                'CLASSPATH=$APP_HOME/lib/' + jar.archiveFileName.get(),
+                'CLASSPATH="$APP_HOME/java/' + jar.archiveFileName.get() +
+                        ':$APP_HOME/java/*:$APP_HOME/java/.:$APP_HOME/java/libs/*"')
+
+        // Fix Eval
+        unixScript.text = unixScript.text.replace(
+                'eval set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $PZ_HOOK_SERVER_OPTS -jar "\\"$CLASSPATH\\"" "$APP_ARGS"',
+                'eval set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $PZ_HOOK_SERVER_OPTS -classpath "$CLASSPATH" PZHook_server.Main $@')
+    }
+
+    // Delete windows script (PZHook_server is only for Linux)
+    windowsScript.delete()
+}
+
+application {
+    mainClass = 'PZHook_server.Main'
+    executableDir = ''
+    applicationDefaultJvmArgs = ["-Dzomboid.steam=0",
+                                 "-Djava.awt.headless=true",
+                                 "-Xms1800m",
+                                 "-Xmx4096m",
+                                 "-Dzomboid.znetlog=1",
+                                 "-Djava.library.path=linux64:natives:.:jre64/lib/amd64",
+                                 "-XX:+UnlockExperimentalVMOptions",
+                                 "-XX:+UseZGC",
+                                 "-javaagent:./java/" + jar.archiveFileName.get(),
+    ]
+}
+
+shadowJar {
+    archiveBaseName.set(jar.archiveFileName.get().replace(".jar", ""))
+    archiveClassifier.set('')
+    archiveVersion.set('')
+    minimize {
+        exclude(dependency('net.uptheinter:.*:.*'))
+    }
+}
+
+jar {
+    manifest {
+        attributes('Premain-Class': 'net.uptheinter.interceptify.EntryPoint',
+                'Agent-Class': 'net.uptheinter.interceptify.EntryPoint',
+                'Main-Class': 'PZHook_server.Main',
+                'Can-Redefine-Classes': 'true',
+                'Can-Retransform-Classes': 'true',
+                'Can-Set-Native-Method-Prefix': 'true',
+        )
+    }
+    destinationDirectory.set(file("$buildDir"))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect { zipTree(it) }
+    }
+}
+
+// TODO: Copy files directly from archive and into new archive
+// Extract Dist Arcive to Work Directory
+task unzip(type: Copy) {
+    def outputDir = file("${buildDir}/unpacked/dist")
+    mustRunAfter shadowDistTar
+    from tarTree("$buildDir/distributions/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") +
+            "-shadow-" + version + ".tar")
+    into outputDir
+
+    mkdir "${buildDir}/unpacked/working"
+    mkdir "${buildDir}/unpacked/working/java"
+}
+tasks.named("shadowDistTar") { finalizedBy("unzip") }
+
+// Create new folder schema for new Distribution
+task buildRedist(type: Copy) {
+    mustRunAfter unzip
+    into "${buildDir}/unpacked"
+    into("working") {
+        from file("${buildDir}/unpacked/dist/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-shadow-" + version + "/bin/" + jar.archiveFileName.get().replace("-" + Version + ".jar", ""))
+    }
+    into("working/java") {
+        from file("${buildDir}/unpacked/dist/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") +
+                "-shadow-" + version + "/lib/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") +
+                "-" + version + ".jar")
+    }
+}
+tasks.named("unzip") { finalizedBy("buildRedist") }
+
+// Repack the new distribution into a tgz
+task redist(type: Tar) {
+    mustRunAfter buildRedist
+    archiveBaseName = jar.archiveFileName.get().replace("-" + Version + ".jar", "")
+    destinationDirectory = file("${buildDir}/distributions/")
+    archiveExtension = 'tgz'
+    compression = Compression.GZIP
+    from files("${buildDir}/unpacked/working")
+}
+tasks.named("buildRedist") { finalizedBy("redist") }
+
+// Cleanup the Build/Work directory
+tasks.register('cleanUnusedDist', Delete) {
+    mustRunAfter redist
+    delete fileTree("${buildDir}/distributions/").matching {
+        include "**/*.*"
+        exclude "**/*.tgz"
+    }
+    delete "${buildDir}/unpacked"
+    delete "${buildDir}/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-" + version + ".jar"
+}
+tasks.named("redist") { finalizedBy("cleanUnusedDist") }
+
+// Install
+task install(type: Copy)  {
+    mustRunAfter redist
+    mustRunAfter build
+    from tarTree("$buildDir/distributions/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-" + version + ".tgz")
+    into file(PZGameFolder)
+}
+tasks.named("build") { finalizedBy("install") }
+
+// Part 3 of Mod Installation (Webserver Resources)
+task launchServer(type: Exec)  {
+    mustRunAfter install
+    workingDir PZGameFolder
+    group = 'application'
+    commandLine 'sh', PZGameFolder + '/PZHook_server'
+}
+
+test {
+    useJUnitPlatform()
+}

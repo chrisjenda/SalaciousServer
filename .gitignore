@@ -1,0 +1,6 @@
+.gradle/
+.idea
+build/
+SalaciousServer/src/main/lua/pz_salacioustweaks/.gitattributes
+SalaciousServer/src/main/java/SalaciousServer/DiscordBot.java
+/SalaciousTweaks_RCON/

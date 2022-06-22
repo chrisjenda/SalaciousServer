@@ -1,0 +1,13 @@
+#parse("/velocity/layout.vm")
+#@mainLayout()
+<h1>$msg.get("ITEMS_HEADING_ALL")</h1>
+<div class="row row-3">
+    #foreach($item in $items)
+        <div class="col">
+            <a class="item" href="/items/$item.basename">
+                $msg.get("ITEMS_CAPTION", $item.displayname, $item.getTooltip())
+            </a>
+        </div>
+    #end
+</div>
+#end
