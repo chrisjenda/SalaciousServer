@@ -2,7 +2,7 @@
 #@mainLayout()
     #if($item)
     <h1>$item.displayname</h1>
-    <h2>$item.getTooltip</h2>
+    <h2>$item.getTooltip()</h2>
     #else
     <h1>$msg.get("ITEMS_ITEM_NOT_FOUND")</h1>
     #end

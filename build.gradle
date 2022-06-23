@@ -1,3 +1,6 @@
+import static org.apache.tools.ant.taskdefs.condition.Os.FAMILY_UNIX
+import static org.apache.tools.ant.taskdefs.condition.Os.isFamily
+
 plugins {
     id "com.github.johnrengelman.shadow" version "7.1.2"
     id 'java'
@@ -45,12 +48,17 @@ dependencies {
 
 startShadowScripts {
     applicationName = "PZHook_server"
+    def Djavalibrary = "-Djava.library.path=linux64:natives:.:jre64/lib/amd64"
+    if (!isFamily(FAMILY_UNIX)) {
+        Djavalibrary = "-Djava.library.path=./natives/;./natives/win64/;./"
+    }
+
     defaultJvmOpts = ["-Dzomboid.steam=0",
                       "-Djava.awt.headless=true",
                       "-Xms1800m",
                       "-Xmx4096m",
                       "-Dzomboid.znetlog=1",
-                      "-Djava.library.path=linux64:natives:.:jre64/lib/amd64",
+                      Djavalibrary,
                       "-XX:+UnlockExperimentalVMOptions",
                       "-XX:+UseZGC",
                       "-javaagent:./java/" + jar.archiveFileName.get(),
@@ -78,10 +86,18 @@ startShadowScripts {
                 "-Dzomboid.steam=0",
                 '-Dzomboid.steam=0" ' + '"-Duser.home=${APP_HOME}')
 
+        windowsScript.text = windowsScript.text.replace(
+                "-Dzomboid.steam=0",
+                '-Dzomboid.steam=0" ' + '"-Duser.home=%APP_HOME%')
+
         // Add Complex Java options and lwjgl path
         unixScript.text = unixScript.text.replace(
-                '"-javaagent:./java/' + group + "-" + version + '.jar"',
-                "-javaagent:./java/" + group + "-" + version + ".jar " + "--add-opens java.base/java.lang.reflect=ALL-UNNAMED " + '-Dorg.lwjgl.librarypath=${APP_HOME}')
+                '"-javaagent:./java/' + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-" + version + '.jar"',
+                "-javaagent:./java/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-" + version + ".jar " + "--add-opens java.base/java.lang.reflect=ALL-UNNAMED " + '-Dorg.lwjgl.librarypath=${APP_HOME}')
+
+        windowsScript.text = windowsScript.text.replace(
+                '-javaagent:./java/' + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-" + version + '.jar',
+                "-javaagent:./java/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-" + version + ".jar " + "--add-opens java.base/java.lang.reflect=ALL-UNNAMED " + '-Dorg.lwjgl.librarypath=%APP_HOME%')
 
         // Fix Classpath and add Game Class Path
         unixScript.text = unixScript.text.replace(
@@ -89,25 +105,42 @@ startShadowScripts {
                 'CLASSPATH="$APP_HOME/java/' + jar.archiveFileName.get() +
                         ':$APP_HOME/java/*:$APP_HOME/java/.:$APP_HOME/java/libs/*"')
 
+        windowsScript.text = windowsScript.text.replace(
+                'CLASSPATH=%APP_HOME%\\lib\\' + jar.archiveFileName.get(),
+                'CLASSPATH="%APP_HOME%java\\' + jar.archiveFileName.get() +
+                        ';%APP_HOME%java\\*;%APP_HOME%java\\.;%APP_HOME%java\\libs\\*"')
         // Fix Eval
         unixScript.text = unixScript.text.replace(
                 'eval set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $PZ_HOOK_SERVER_OPTS -jar "\\"$CLASSPATH\\"" "$APP_ARGS"',
                 'eval set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $PZ_HOOK_SERVER_OPTS -classpath "$CLASSPATH" PZHook_server.Main $@')
+
+        windowsScript.text = windowsScript.text.replace(
+                '"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PZ_HOOK_SERVER_OPTS%  -jar "%CLASSPATH%" %CMD_LINE_ARGS%',
+                '"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PZ_HOOK_SERVER_OPTS% -classpath "%CLASSPATH%" PZHook_server.Main %*')
     }
 
-    // Delete windows script (PZHook_server is only for Linux)
-    windowsScript.delete()
+    if (isFamily(FAMILY_UNIX)) {
+        windowsScript.delete()
+    } else {
+        unixScript.delete()
+    }
+
 }
 
 application {
     mainClass = 'PZHook_server.Main'
     executableDir = ''
+    applicationName = "PZHook_server"
+    def Djavalibrary = "-Djava.library.path=linux64:natives:.:jre64/lib/amd64"
+    if (!isFamily(FAMILY_UNIX)) {
+        Djavalibrary = "-Djava.library.path=./natives/;./natives/win64/;./"
+    }
     applicationDefaultJvmArgs = ["-Dzomboid.steam=0",
                                  "-Djava.awt.headless=true",
                                  "-Xms1800m",
                                  "-Xmx4096m",
                                  "-Dzomboid.znetlog=1",
-                                 "-Djava.library.path=linux64:natives:.:jre64/lib/amd64",
+                                 Djavalibrary,
                                  "-XX:+UnlockExperimentalVMOptions",
                                  "-XX:+UseZGC",
                                  "-javaagent:./java/" + jar.archiveFileName.get(),
@@ -160,7 +193,9 @@ task buildRedist(type: Copy) {
     mustRunAfter unzip
     into "${buildDir}/unpacked"
     into("working") {
-        from file("${buildDir}/unpacked/dist/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-shadow-" + version + "/bin/" + jar.archiveFileName.get().replace("-" + Version + ".jar", ""))
+        from file("${buildDir}/unpacked/dist/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") +
+                "-shadow-" + version + "/bin/" +
+                jar.archiveFileName.get().replace("-" + Version + ".jar", "") + (isFamily(FAMILY_UNIX) ? "" : ".bat"))
     }
     into("working/java") {
         from file("${buildDir}/unpacked/dist/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") +
@@ -175,8 +210,12 @@ task redist(type: Tar) {
     mustRunAfter buildRedist
     archiveBaseName = jar.archiveFileName.get().replace("-" + Version + ".jar", "")
     destinationDirectory = file("${buildDir}/distributions/")
-    archiveExtension = 'tgz'
-    compression = Compression.GZIP
+    if (isFamily(FAMILY_UNIX)) {
+        archiveExtension = 'tgz'
+        compression = Compression.GZIP
+    } else {
+        archiveExtension = 'zip'
+    }
     from files("${buildDir}/unpacked/working")
 }
 tasks.named("buildRedist") { finalizedBy("redist") }
@@ -186,7 +225,7 @@ tasks.register('cleanUnusedDist', Delete) {
     mustRunAfter redist
     delete fileTree("${buildDir}/distributions/").matching {
         include "**/*.*"
-        exclude "**/*.tgz"
+        exclude (isFamily(FAMILY_UNIX) ? "**/*.tgz" : "**/*.zip")
     }
     delete "${buildDir}/unpacked"
     delete "${buildDir}/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-" + version + ".jar"
@@ -197,7 +236,9 @@ tasks.named("redist") { finalizedBy("cleanUnusedDist") }
 task install(type: Copy)  {
     mustRunAfter redist
     mustRunAfter build
-    from tarTree("$buildDir/distributions/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") + "-" + version + ".tgz")
+
+    from tarTree("$buildDir/distributions/" + jar.archiveFileName.get().replace("-" + Version + ".jar", "") +
+            "-" + version + (isFamily(FAMILY_UNIX) ? ".tgz" : ".zip"))
     into file(PZGameFolder)
 }
 tasks.named("build") { finalizedBy("install") }
@@ -206,8 +247,13 @@ tasks.named("build") { finalizedBy("install") }
 task launchServer(type: Exec)  {
     mustRunAfter install
     workingDir PZGameFolder
-    group = 'application'
-    commandLine 'sh', PZGameFolder + '/PZHook_server'
+    setGroup('application')
+    if (isFamily(FAMILY_UNIX)) {
+        commandLine 'sh', PZGameFolder + '/PZHook_server'
+    } else {
+        // TODO get Drive letter from PZGameFolder path
+        commandLine = ['cmd', '/C', 'start', 'PZHook_server.bat']
+    }
 }
 
 test {

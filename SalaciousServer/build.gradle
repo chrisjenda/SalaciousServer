@@ -1,3 +1,6 @@
+import static org.apache.tools.ant.taskdefs.condition.Os.FAMILY_UNIX
+import static org.apache.tools.ant.taskdefs.condition.Os.isFamily
+
 plugins {
     id 'java-library'
     id 'net.ltgt.errorprone' version '2.0.2'
@@ -124,17 +127,29 @@ task copyLua(type: Copy) {
 }
 tasks.named("preDistro") { finalizedBy("copyLua") }
 
+task copyWebserver(type: Copy) {
+    mustRunAfter copyLua
+    from fileTree("${buildDir}/../src/main/resources")
+    into "${buildDir}/projectzomboid/java"
+    exclude "poster.png"
+}
+tasks.named("copyLua") { finalizedBy("copyWebserver") }
+
 // Repack the new distribution into a tgz
 task packModDistro(type: Tar) {
     shouldRunAfter copyLua
     archiveBaseName = jar.archiveFileName.get().replace("-" + modssversion + ".jar", "")
     destinationDirectory = file("${buildDir}/distributions/")
-    archiveExtension = 'tgz'
-    compression = Compression.GZIP
+    if (isFamily(FAMILY_UNIX)) {
+        archiveExtension = 'tgz'
+        compression = Compression.GZIP
+    } else {
+        archiveExtension = 'zip'
+    }
     from files("${buildDir}/unpacked/working")
 
 }
-tasks.named("copyLua") { finalizedBy("packModDistro") }
+tasks.named("copyWebserver") { finalizedBy("packModDistro") }
 tasks.named("copyDeps") { finalizedBy("packModDistro") }
 
 // Repack the new distribution into a tgz
@@ -142,8 +157,12 @@ task packLIBSDistro(type: Tar) {
     mustRunAfter packModDistro
     archiveBaseName = jar.archiveFileName.get().replace("-" + modssversion + ".jar", "") + '-LIBS'
     destinationDirectory = file("${buildDir}/distributions/")
-    archiveExtension = 'tgz'
-    compression = Compression.GZIP
+    if (isFamily(FAMILY_UNIX)) {
+        archiveExtension = 'tgz'
+        compression = Compression.GZIP
+    } else {
+        archiveExtension = 'zip'
+    }
     from files("${buildDir}/projectzomboid")
 }
 tasks.named("packModDistro") { finalizedBy("packLIBSDistro") }
@@ -153,7 +172,11 @@ tasks.register('cleanUnusedDist', Delete) {
     mustRunAfter packModDistro
     delete fileTree("${buildDir}/distributions/").matching {
         include "**/*.*"
-        exclude "**/*.tgz"
+        exclude (isFamily(FAMILY_UNIX) ? "**/*.tgz" : "**/*.zip")
+    }
+    delete fileTree("${buildDir}/projectzomboid/java").matching {
+        include "**/*.*"
+        exclude "libs/*.*"
     }
     delete "${buildDir}/unpacked/working/" + modid
     delete "${buildDir}/" + jar.archiveFileName.get()
@@ -164,7 +187,7 @@ tasks.named("packLIBSDistro") { finalizedBy("cleanUnusedDist") }
 task installLibs(type: Copy)  {
     mustRunAfter cleanUnusedDist
     from tarTree("$buildDir/distributions/" +
-            jar.archiveFileName.get().replace("-" + modssversion + ".jar", "") + '-LIBS-' + version + ".tgz")
+            jar.archiveFileName.get().replace("-" + modssversion + ".jar", "") + '-LIBS-' + version + (isFamily(FAMILY_UNIX) ? ".tgz" : ".zip"))
     into file(PZGameFolder)
 }
 tasks.named("cleanUnusedDist") { finalizedBy("installLibs") }
@@ -172,11 +195,12 @@ tasks.named("cleanUnusedDist") { finalizedBy("installLibs") }
 // Part 2 of Mod Installation (Mod)
 task installMod(type: Copy)  {
     mustRunAfter installLibs
-    from tarTree("$buildDir/distributions/" + jar.archiveFileName.get().replace(".jar", ".tgz"))
+    from tarTree("$buildDir/distributions/" + jar.archiveFileName.get().replace(".jar", (isFamily(FAMILY_UNIX) ? ".tgz" : ".zip")))
     into file(PZGameCacheFolder + "/mods/")
 }
 tasks.named("installLibs") { finalizedBy("installMod") }
 
+/*
 // Part 3 of Mod Installation (Webserver Resources)
 task installResources(type: Copy)  {
     mustRunAfter installMod
@@ -185,6 +209,8 @@ task installResources(type: Copy)  {
     exclude "poster.png"
 }
 tasks.named("installMod") { finalizedBy("installResources") }
+
+ */
 
 test {
     useJUnitPlatform()
