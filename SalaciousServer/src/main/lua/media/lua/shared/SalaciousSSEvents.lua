@@ -1,2 +1,0 @@
---SalciousSSEvent = {SalaciousTakeSS = 'SalaciousTakeSS'}
---LuaEventManager.AddEvent(SalciousSSEvent.SalaciousTakeSS)

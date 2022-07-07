@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO">
+    <Properties>
+        <Property name="logLevelPattern">
+            %level{VERBOSE=INFO}
+        </Property>
+        <Property name="logFilePattern">
+            logs/salaciousserver/$${date:yyyy-MM}/pz-salaciousserver-%d{MM-dd-yyyy}
+        </Property>
+    </Properties>
+    <CustomLevels>
+        <CustomLevel name="VERBOSE" intLevel="450"/>
+    </CustomLevels>
+    <Appenders>
+        <!-- Console appenders -->
+        <Console name="SalaciousServerConsole" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{[HH:mm:ss]} [${logLevelPattern}] [%c{1}]: %msg%n"/>
+        </Console>
+        <Console name="ZomboidConsole" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{[HH:mm:ss]} [${logLevelPattern}] [%c{1}/%msg%n"/>
+        </Console>
+        <!-- SalaciousServer File appenders -->
+        <RollingFile name="SalaciousServerMainFile" fileName="logs/salaciousserver/main.log"
+                     filePattern="${logFilePattern}-%i.log.zip">
+            <PatternLayout pattern="%d{[yyyy-MM-dd][HH:mm:ss]} [${logLevelPattern}] [%c{1}]: %msg%n"/>
+            <Policies>
+                <OnStartupTriggeringPolicy/>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+        <RollingFile name="SalaciousServerDebugFile" fileName="logs/salaciousserver/debug.log"
+                     filePattern="${logFilePattern}-debug-%i.log.zip">
+            <PatternLayout pattern="%d{[yyyy-MM-dd][HH:mm:ss]} [${logLevelPattern}] [%c{1}]: %msg%n"/>
+            <Policies>
+                <OnStartupTriggeringPolicy/>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+        <!-- Zomboid File appenders -->
+        <RollingFile name="ZomboidMainFile" fileName="logs/salaciousserver/main.log"
+                     filePattern="${logFilePattern}-%i.log.zip">
+            <PatternLayout pattern="%d{[yyyy-MM-dd][HH:mm:ss]} [${logLevelPattern}] [%c{1}/%msg%n"/>
+            <Policies>
+                <OnStartupTriggeringPolicy/>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+        <RollingFile name="ZomboidDebugFile" fileName="logs/salaciousserver/debug.log"
+                     filePattern="${logFilePattern}-debug-%i.log.zip">
+            <PatternLayout pattern="%d{[yyyy-MM-dd][HH:mm:ss]} [${logLevelPattern}] [%c{1}/%msg%n"/>
+            <Policies>
+                <OnStartupTriggeringPolicy/>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+    </Appenders>
+    <Loggers>
+        <Logger name="Zomboid" level="debug" additivity="false">
+            <AppenderRef ref="ZomboidConsole" level="verbose"/>
+            <AppenderRef ref="ZomboidMainFile" level="verbose"/>
+            <AppenderRef ref="ZomboidDebugFile"/>
+        </Logger>
+        <Root level="debug">
+            <AppenderRef ref="SalaciousServerConsole" level="verbose"/>
+            <AppenderRef ref="SalaciousServerMainFile" level="verbose"/>
+            <AppenderRef ref="SalaciousServerDebugFile"/>
+        </Root>
+    </Loggers>
+</Configuration>
